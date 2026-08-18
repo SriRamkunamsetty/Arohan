@@ -52,14 +52,29 @@ const int RGB_G = 5;
 WiFiClient wifiClient;
 
 // ========================== CONFIG ==========================
-const char *AP_SSID = "Arohhan_Rover";
-const char *AP_PASS = "12345678";
+// Copy credentials.example.h to credentials.h and fill it locally.
+// credentials.h is ignored by Git and must never be committed.
+#if __has_include("credentials.h")
+#include "credentials.h"
+#endif
 
-// --- HOME WIFI SETTINGS ---
-// Enter your Home Wi-Fi credentials here:
-const char *STA_SSID = "Airtel_Fearless";
-const char *STA_PASS = "Fearless@1234";
-// --------------------------
+#ifndef AROHAN_AP_SSID
+#define AROHAN_AP_SSID "AROHAN_Rover"
+#endif
+#ifndef AROHAN_AP_PASS
+#define AROHAN_AP_PASS ""
+#endif
+#ifndef AROHAN_STA_SSID
+#define AROHAN_STA_SSID ""
+#endif
+#ifndef AROHAN_STA_PASS
+#define AROHAN_STA_PASS ""
+#endif
+
+const char *AP_SSID = AROHAN_AP_SSID;
+const char *AP_PASS = AROHAN_AP_PASS;
+const char *STA_SSID = AROHAN_STA_SSID;
+const char *STA_PASS = AROHAN_STA_PASS;
 
 // STA/Firebase REMOVED — ESP32 is AP+STA, Python server handles Firebase
 
@@ -2309,7 +2324,7 @@ void setup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
 
-  // Quick passive scan to find Airtel_Fearless's channel
+  // Quick passive scan to find the configured home network's channel
   Serial.print("[WiFi] Scanning for home router channel...");
   int8_t homeChannel = 6;                              // fallback if not found
   int n = WiFi.scanNetworks(false, false, false, 150); // passive, 150 ms
