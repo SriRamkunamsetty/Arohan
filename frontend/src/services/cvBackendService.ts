@@ -3,16 +3,32 @@ import { RoverAlert, RoverAlertType } from '@/types/alerts';
 // CV Backend Configuration
 const CV_BACKEND_URL = import.meta.env.VITE_CV_BACKEND_URL || 'http://localhost:5000';
 
+export type AnalyzeFrameSource = 'esp32' | 'base64';
+
 export interface AnalyzeFrameRequest {
-  source: 'esp32' | 'upload';
-  imageUrl?: string;
+  source: AnalyzeFrameSource;
+  image?: string;
+}
+
+export interface DetectedFace {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name: string | null;
+  confidence: number;
+  is_known: boolean;
+  track_id: number;
 }
 
 export interface AnalyzeFrameResponse {
   status: 'success' | 'error';
-  alert?: RoverAlert;
   message?: string;
   error?: string;
+  faces_detected?: number;
+  faces?: DetectedFace[];
+  alerts?: RoverAlert[];
+  snapshot_url?: string;
 }
 
 export interface BackendHealth {
@@ -32,6 +48,10 @@ export class CVBackendService {
 
   // Analyze frame from ESP32-CAM
   async analyzeFrame(request: AnalyzeFrameRequest = { source: 'esp32' }): Promise<AnalyzeFrameResponse> {
+    if (request.source === 'base64' && !request.image) {
+      return { status: 'error', error: 'image is required for base64 analysis' };
+    }
+
     try {
       const response = await fetch(`${this.baseUrl}/analyze-frame`, {
         method: 'POST',
