@@ -8,9 +8,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  ExternalLink
 } from 'lucide-react';
-import { cvBackendService } from '@/services/cvBackendService';
+import { cvBackendService, BackendHealth } from '@/services/cvBackendService';
 
 interface CVBackendStatusProps {
   className?: string;
@@ -19,7 +18,7 @@ interface CVBackendStatusProps {
 export const CVBackendStatus: React.FC<CVBackendStatusProps> = ({ className = '' }) => {
   const [status, setStatus] = useState<{
     connected: boolean;
-    health?: any;
+    health?: BackendHealth;
     error?: string;
     loading: boolean;
   }>({
@@ -100,12 +99,25 @@ export const CVBackendStatus: React.FC<CVBackendStatusProps> = ({ className = ''
             </div>
             <div className="flex justify-between">
               <span>Known Faces:</span>
-              <span>{status.health.known_encodings || 0}</span>
+                <span>{status.health.known_faces}</span>
             </div>
             <div className="flex justify-between">
-              <span>Alerts:</span>
-              <span>{status.health.alerts_count || 0}</span>
+              <span>Known Encodings:</span>
+              <span>{status.health.total_encodings}</span>
             </div>
+            <div className="flex justify-between">
+              <span>ESP32 Camera:</span>
+              <span className={status.health.esp32_connected ? 'text-green-500' : 'text-yellow-500'}>
+                {status.health.esp32_connected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Frames:</span>
+              <span>{status.health.esp32_frames}</span>
+            </div>
+            {status.health.esp32_error && (
+              <div className="text-yellow-500">{status.health.esp32_error}</div>
+            )}
           </div>
         )}
 
