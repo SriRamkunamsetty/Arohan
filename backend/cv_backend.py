@@ -31,6 +31,11 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 
 try:
+    from .api_auth import require_auth
+except ImportError:
+    from api_auth import require_auth
+
+try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
     pass
@@ -1424,6 +1429,7 @@ class CVBackend:
             return jsonify({'service':'AROHAN CV Backend FINAL'})
 
         @self.app.route('/update-esp32-url',methods=['POST'])
+        @require_auth({'admin', 'operator', 'service'})
         def upd_url():
             u=(request.get_json() or {}).get('url','').strip()
             if not u: return jsonify({'error':'url required'}),400
@@ -1431,6 +1437,7 @@ class CVBackend:
             return jsonify({'status':'ok','url':u})
 
         @self.app.route('/analyze-frame',methods=['POST'])
+        @require_auth()
         def analyze():
             try:
                 d=request.get_json() or {}
@@ -1453,6 +1460,7 @@ class CVBackend:
                 return jsonify({'error':str(e)}),500
 
         @self.app.route('/annotated-frame')
+        @require_auth()
         def ann_frame():
             try:
                 f=_reader.frame() if _reader else None
@@ -1465,11 +1473,13 @@ class CVBackend:
             except Exception as e: return jsonify({'error':str(e)}),500
 
         @self.app.route('/alerts')
+        @require_auth()
         def get_alerts():
             return jsonify([asdict(a) for a in
                             sorted(self.alerts,key=lambda a:a.createdAt,reverse=True)[:50]])
 
         @self.app.route('/stream-annotated')
+        @require_auth()
         def stream_ann():
             def gen():
                 last_ts=0.0; last_alert:Dict[str,float]={}; blank=False
@@ -1508,6 +1518,7 @@ class CVBackend:
                                      'Access-Control-Allow-Origin':'*'})
 
         @self.app.route('/stream-raw')
+        @require_auth()
         def stream_raw():
             def gen():
                 lt=0.0
@@ -1532,6 +1543,7 @@ class CVBackend:
                                      'Access-Control-Allow-Origin':'*'})
 
         @self.app.route('/alerts',methods=['POST'])
+        @require_auth({'admin', 'operator', 'service'})
         def add_alert():
             try:
                 a=RoverAlert(**request.get_json())
@@ -1539,6 +1551,7 @@ class CVBackend:
             except Exception as e: return jsonify({'error':str(e)}),400
 
         @self.app.route('/reload-faces',methods=['POST'])
+        @require_auth({'admin', 'operator'})
         def reload():
             try:
                 with self._lock: self.reload()
@@ -1548,6 +1561,7 @@ class CVBackend:
             except Exception as e: return jsonify({'error':str(e)}),500
 
         @self.app.route('/add-face',methods=['POST'])
+        @require_auth({'admin', 'operator'})
         def add_face():
             try:
                 d=request.get_json() or {}
@@ -1574,6 +1588,7 @@ class CVBackend:
                 return jsonify({'error':str(e)}),500
 
         @self.app.route('/known-faces')
+        @require_auth()
         def known():
             people={}
             for item in sorted(KNOWN_DIR.iterdir()):
@@ -1586,9 +1601,11 @@ class CVBackend:
                             'total_encodings':len(self.known_encs)})
 
         @self.app.route('/static/snapshots/<f>')
+        @require_auth()
         def snap(f): return send_from_directory(str(SNAP_DIR),f)
 
         @self.app.route('/send-test-whatsapp', methods=['POST'])
+        @require_auth({'admin', 'operator'})
         def test_whatsapp():
             try:
                 result = self._wa.send(
@@ -1607,6 +1624,7 @@ class CVBackend:
                 return jsonify({'success': False, 'error': str(e)}), 500
 
         @self.app.route('/test-call', methods=['POST'])
+        @require_auth({'admin', 'operator'})
         def test_call():
             """Test emergency voice call."""
             try:
@@ -1623,6 +1641,7 @@ class CVBackend:
                 return jsonify({'success': False, 'error': str(e)}), 500
         # ── DIRECT ROVER CONTROL (no Firebase needed) ────────────
         @self.app.route('/rover/control', methods=['POST'])
+        @require_auth({'admin', 'operator', 'service'})
         def rover_control():
             """Send command IMMEDIATELY to rover — no polling delay."""
             try:
@@ -1645,6 +1664,7 @@ class CVBackend:
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/rover/stop', methods=['POST', 'GET'])
+        @require_auth({'admin', 'operator', 'service'})
         def rover_stop():
             self._rover_bridge._send_cmd('/stop')
             self._rover_bridge.set_direct('stop', 0)
