@@ -1,24 +1,22 @@
-from ..fusion.sensor_fusion import fuse_sensor_data
+"""Backward-compatible severity API backed by the canonical hazard model."""
 
-def classify_severity(risk_score):
-    """
-    Classifies risk score into actionable severity levels.
-    """
-    if risk_score >= 80:
-        return "CRITICAL"
-    elif risk_score >= 50:
-        return "HIGH"
-    elif risk_score >= 20:
-        return "MEDIUM"
-    else:
-        return "LOW"
+from ai.hazard_model import (
+    HazardAssessment,
+    classify_severity,
+    evaluate_hazard,
+    fuse_sensor_data,
+)
+
 
 def evaluate_node(temp, gas, motion, smoke):
-    score = fuse_sensor_data(temp, gas, motion, smoke)
-    severity = classify_severity(score)
-    return {
-        "risk_score": score,
-        "severity": severity,
-        "requires_rover": severity in ["HIGH", "CRITICAL"],
-        "requires_evacuation": severity == "CRITICAL"
-    }
+    """Return the legacy dictionary shape using canonical scoring semantics."""
+    return evaluate_hazard(temp, gas, motion, smoke).as_dict()
+
+
+__all__ = [
+    "HazardAssessment",
+    "classify_severity",
+    "evaluate_hazard",
+    "evaluate_node",
+    "fuse_sensor_data",
+]
