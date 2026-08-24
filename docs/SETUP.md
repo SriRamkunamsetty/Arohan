@@ -12,7 +12,7 @@
 
 ```bash
 git clone <repository-url>
-cd ronin
+cd Arohan
 ```
 
 ## Step 2: Firebase Setup
@@ -20,7 +20,7 @@ cd ronin
 ### 2.1 Create Firebase Project
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click "Add project"
-3. Enter project name: `ronin` (or your choice)
+3. Enter project name: `AROHAN` (or your choice)
 4. Disable Google Analytics (optional)
 5. Click "Create project"
 
@@ -49,7 +49,7 @@ firebase login
 firebase init database
 # Select your project
 # Use database.rules.json
-firebase deploy --only database
+firebase deploy --only database,storage
 ```
 
 ## Step 3: Groq API Setup
@@ -94,9 +94,15 @@ VITE_CV_BACKEND_URL=http://localhost:5000
 VITE_GROQ_API_KEY=gsk_your_groq_api_key_here
 ```
 
-### 4.3 Start Frontend
+### 3. Start Frontend
 ```bash
 npm run dev
+```
+
+Run the automated frontend checks before submitting changes:
+```bash
+npm test
+npm run build
 ```
 
 Frontend will be available at `http://localhost:5173`
@@ -145,9 +151,26 @@ MAX_SNAPSHOTS=200
 FIREBASE_CREDENTIALS=firebase-credentials.json
 FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
 FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+
+# Backend API security (do not commit values)
+APP_ENV=production
+AROHAN_ALLOW_ANONYMOUS=false
+AROHAN_API_KEY=replace-with-a-long-random-service-key
+AROHAN_OPERATOR_ROLES=admin,operator
+AROHAN_NODE_ID=cv-backend
+AROHAN_TRIGGER_TOKEN=replace-with-a-long-random-trigger-token
+AROHAN_ALLOWED_NODES=iot,iotA
+MAX_FACE_IMAGE_BYTES=5242880
+MAX_FACE_IMAGE_PIXELS=12000000
 ```
 
-### 5.3 Add Training Images
+### 5.3 Configure Backend Authentication
+
+Protected CV, rover-control, face-management, and notification routes require either a Firebase ID token (`Authorization: Bearer <token>`) with an `admin` or `operator` custom claim, or the service key header where the route explicitly permits it. Do not enable anonymous mode in production.
+
+For the local IoT dispatch trigger, set `AROHAN_TRIGGER_TOKEN` and send it as `X-AROHAN-Trigger-Token`. The accepted node names are controlled by `AROHAN_ALLOWED_NODES`.
+
+### 5.4 Add Training Images
 ```bash
 mkdir -p known_faces/person_name
 # Add 3-5 images per person
@@ -157,7 +180,7 @@ mkdir -p known_faces/person_name
 # known_faces/shivam/photo1.jpg
 ```
 
-### 5.4 Start Backend
+### 5.5 Start Backend
 ```bash
 python cv_backend.py
 ```
@@ -176,17 +199,17 @@ Backend will be available at `http://localhost:5000`
    - Search "ESP32" and install
 
 ### 6.2 Flash Camera Code
-1. Open `AROHAN_Rover_FINAL/esp32cam/esp32cam.ino`
-2. Update WiFi credentials:
-   ```cpp
-   const char* ssid = "YOUR_WIFI_SSID";
-   const char* password = "YOUR_WIFI_PASSWORD";
+1. Open `hardware/esp32cam/esp32cam.ino`
+2. Create the ignored local credential header:
+   ```bash
+   cp hardware/esp32cam/credentials.example.h hardware/esp32cam/credentials.h
    ```
-3. Select board: "AI Thinker ESP32-CAM"
-4. Select port (USB-to-Serial adapter)
-5. Upload code
-6. Open Serial Monitor (115200 baud)
-7. Note the IP address printed
+3. Replace the values in `hardware/esp32cam/credentials.h` locally. See [`hardware/CREDENTIALS.md`](../hardware/CREDENTIALS.md).
+4. Select board: "AI Thinker ESP32-CAM"
+5. Select port (USB-to-Serial adapter)
+6. Upload code
+7. Open Serial Monitor (115200 baud)
+8. Note the IP address printed
 
 ### 6.3 Update Frontend .env
 ```bash
@@ -339,7 +362,7 @@ After=network.target
 [Service]
 Type=simple
 User=arohan
-WorkingDirectory=/home/arohan/ronin/backend
+WorkingDirectory=/home/arohan/Arohan/backend
 Environment="PATH=/home/arohan/venv/bin"
 ExecStart=/home/arohan/venv/bin/python cv_backend.py
 Restart=always

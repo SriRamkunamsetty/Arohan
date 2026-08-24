@@ -280,6 +280,10 @@ enc_matrix = np.stack(encodings)  # For vectorized matching
 }
 ```
 
+### Authentication
+
+The health and root endpoints are public for monitoring. All frame, stream, alert, face-management, notification, and rover-control endpoints require authentication. Dashboard requests should send a Firebase ID token using `Authorization: Bearer <id-token>`. Trusted local services may send `X-AROHAN-API-Key` when the route permits the `service` role. In production, keep `AROHAN_ALLOW_ANONYMOUS=false` and assign `admin` or `operator` custom claims only to approved accounts.
+
 ### GET /health
 **Description**: System health check
 
