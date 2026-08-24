@@ -1681,19 +1681,29 @@ class CVBackend:
                             except: pass
 
     def _save_snap(self,frame,path,fname):
+        SNAP_DIR.mkdir(parents=True, exist_ok=True)
         snaps=sorted(SNAP_DIR.glob('*.jpg'),key=lambda p:p.stat().st_mtime)
         for s in snaps[:max(0,len(snaps)-MAX_SNAPSHOTS)]:
             try: s.unlink()
-            except: pass
-        cv2.imwrite(str(path),frame,[cv2.IMWRITE_JPEG_QUALITY,85])
+            except OSError: pass
+        if not cv2.imwrite(str(path),frame,[cv2.IMWRITE_JPEG_QUALITY,85]):
+            raise IOError(f"failed to persist snapshot: {path}")
         self._fb_snap(path,fname)
 
     def _fb_snap(self,path,fname):
-        if not self.firebase_ok: return
+        if not self.firebase_ok: return False
         try:
             b=storage.bucket().blob(f'ronin/snapshots/{fname}')
-            b.upload_from_filename(str(path)); b.make_public()
-        except Exception as e: print(f" FB upload: {e}")
+            b.metadata = {
+                'nodeId': os.getenv('AROHAN_NODE_ID', 'cv-backend'),
+                'snapshotId': fname,
+            }
+            b.upload_from_filename(str(path), content_type='image/jpeg')
+            print(f" Firebase snapshot uploaded: {b.name}")
+            return True
+        except Exception as e:
+            print(f" Firebase snapshot upload failed: {e}")
+            return False
 
     def _fb_alert(self,a):
         if not self.firebase_ok: return
