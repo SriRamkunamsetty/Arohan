@@ -18,7 +18,7 @@ Root causes fixed vs v3:
                          stable across minor lighting changes).
 """
 
-import os, cv2, time, base64, pickle, threading, requests, uuid
+import os, cv2, time, base64, pickle, threading, requests, uuid, re, binascii
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict, deque, Counter
@@ -67,6 +67,9 @@ BACKEND_URL = os.getenv('BACKEND_URL',  'http://localhost:5000')
 SNAP_DIR        = Path('static/snapshots')
 KNOWN_DIR       = Path('known_faces')
 ENCODINGS_FILE  = Path('trained_model/encodings.pkl')
+FACE_NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$')
+MAX_FACE_IMAGE_BYTES = int(os.getenv('MAX_FACE_IMAGE_BYTES', str(5 * 1024 * 1024)))
+MAX_FACE_IMAGE_PIXELS = int(os.getenv('MAX_FACE_IMAGE_PIXELS', str(12_000_000)))
 
 # Recognition thresholds
 FR_THRESH  = float(os.getenv('FR_DISTANCE_THRESHOLD', '0.55'))   # face_recognition L2 dist
@@ -101,6 +104,27 @@ DNN_MODEL_URL = ("https://raw.githubusercontent.com/opencv/opencv_3rdparty/"
 
 for d in [SNAP_DIR, KNOWN_DIR, Path('trained_model')]:
     d.mkdir(parents=True, exist_ok=True)
+
+
+def _decode_face_image(value: str) -> Optional[np.ndarray]:
+    if not isinstance(value, str) or not value:
+        raise ValueError('image required')
+    encoded = value.split(',', 1)[-1]
+    if len(encoded) > MAX_FACE_IMAGE_BYTES * 2:
+        raise ValueError('image payload too large')
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError('invalid base64 image') from exc
+    if len(raw) > MAX_FACE_IMAGE_BYTES:
+        raise ValueError('image payload too large')
+    frame = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise ValueError('decode fail')
+    height, width = frame.shape[:2]
+    if height * width > MAX_FACE_IMAGE_PIXELS:
+        raise ValueError('image dimensions too large')
+    return frame
 
 COLOR_KNOWN   = (0, 230, 0)
 COLOR_UNKNOWN = (0, 0, 230)
@@ -1552,19 +1576,23 @@ class CVBackend:
             try:
                 d=request.get_json() or {}
                 name=d.get('name','').strip()
-                b64=d.get('image','')
-                if not name: return jsonify({'error':'name required'}),400
-                if not b64:  return jsonify({'error':'image required'}),400
-                if ',' in b64: b64=b64.split(',',1)[1]
-                arr=np.frombuffer(base64.b64decode(b64),np.uint8)
-                f=cv2.imdecode(arr,cv2.IMREAD_COLOR)
-                if f is None: return jsonify({'error':'decode fail'}),400
+                if not name or not FACE_NAME_RE.fullmatch(name):
+                    return jsonify({'error':'name must contain only letters, numbers, spaces, _ or -'}),400
+                try:
+                    f=_decode_face_image(d.get('image',''))
+                except ValueError as exc:
+                    return jsonify({'error':str(exc)}),400
                 f=_enhance(f)
                 faces=detect_faces(f,self.det,self.det_mode)
                 if not faces: return jsonify({'error':'no face detected'}),400
-                pd=KNOWN_DIR/name; pd.mkdir(parents=True,exist_ok=True)
+                root=KNOWN_DIR.resolve()
+                pd=(KNOWN_DIR/name).resolve()
+                if root not in pd.parents:
+                    return jsonify({'error':'invalid face path'}),400
+                pd.mkdir(parents=True,exist_ok=True)
                 fp=pd/f"{name}_{len(list(pd.glob('*.jpg')))+1:03d}.jpg"
-                cv2.imwrite(str(fp),f)
+                if not cv2.imwrite(str(fp),f):
+                    return jsonify({'error':'failed to save image'}),500
                 with self._lock: self.reload()
                 return jsonify({'status':'ok','name':name,
                                 'known_people':sorted(set(self.known_names)),
