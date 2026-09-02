@@ -16,12 +16,23 @@ import argparse
 import logging
 import sys
 import os
+import re
+import hmac
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-FIREBASE_DB_URL = "https://ronin-80b29-default-rtdb.firebaseio.com"
-ROVER_AP_IP = "arohan.local"   # Defaulting to mDNS resolution on home network (fallback to "192.168.4.1" if disconnected)
-ROVER_PORT = 80
+FIREBASE_DB_URL = os.getenv(
+    "FIREBASE_DATABASE_URL", "https://ronin-80b29-default-rtdb.firebaseio.com"
+)
+ROVER_AP_IP = os.getenv("ROVER_IP", "arohan.local")
+ROVER_PORT = int(os.getenv("ROVER_PORT", "80"))
+TRIGGER_TOKEN = os.getenv("AROHAN_TRIGGER_TOKEN", "")
+ALLOWED_NODES = {
+    value.strip()
+    for value in os.getenv("AROHAN_ALLOWED_NODES", "iot,iotA").split(",")
+    if value.strip()
+}
+NODE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 POLL_ROVER_INTERVAL = 10       # seconds between rover status checks
 COOLDOWN_AFTER_MISSION = 10   # seconds to wait after mission completes before accepting new calls
 NODE_POLL_FALLBACK = 2        # seconds between polls if listener fails
@@ -43,6 +54,8 @@ log = logging.getLogger("dispatch")
 # ─── Globals ─────────────────────────────────────────────────────────────────
 
 dispatch_queue: queue.Queue = queue.Queue()
+queue_lock = threading.Lock()
+queued_nodes: set[str] = set()
 rover_busy = False
 dry_run = False
 offline_mode = False              # True = skip Firebase, use local HTTP trigger instead
@@ -146,7 +159,7 @@ def is_rover_idle() -> bool:
             return status.get("state", "IDLE") == "IDLE" and not status.get("rep", False)
     except Exception:
         pass
-    return True  # Assume idle if can't reach rover
+    return False  # Fail closed: unknown rover state must not permit dispatch
 
 
 
@@ -205,6 +218,8 @@ def dispatch_worker():
     while True:
         # Block until a node name appears in the queue
         node_name = dispatch_queue.get()
+        with queue_lock:
+            queued_nodes.discard(node_name)
         log.info(f"📋 Dequeued dispatch request: {node_name}")
 
         # ── Cooldown check ──
@@ -215,8 +230,15 @@ def dispatch_worker():
             time.sleep(wait)
 
         # ── Check path exists ──
-        load_available_paths()  # Refresh
-        if node_name not in known_paths:
+        if not NODE_NAME_RE.fullmatch(node_name) or node_name not in ALLOWED_NODES:
+            log.warning(f"⚠️ Rejected node name '{node_name}' (not in allow-list)")
+            reset_calling_status(node_name)
+            dispatch_queue.task_done()
+            continue
+
+        if not offline_mode:
+            load_available_paths()  # Refresh
+        if not offline_mode and node_name not in known_paths:
             log.warning(f"⚠️ No path named '{node_name}' in Firebase. Skipping.")
             log.info(f"  Available paths: {known_paths}")
             log.info(f"  TIP: Record a path on the rover and save it with the name '{node_name}'")
@@ -369,11 +391,13 @@ def start_confirm_countdown(node_name: str):
     def _confirmed(n=node_name):
         pending_confirms.pop(n, None)
         log.info(f"✅ '{n}' confirmed after {CONFIRM_DELAY}s — DISPATCHING rover!")
-        if n not in [q for q in dispatch_queue.queue]:
+        with queue_lock:
+            if n in queued_nodes or rover_busy:
+                log.info(f"  '{n}' already queued or rover busy, skipping duplicate")
+                return
+            queued_nodes.add(n)
             dispatch_queue.put(n)
-            log.info(f"  Added '{n}' to dispatch queue (queue size: {dispatch_queue.qsize()})")
-        else:
-            log.info(f"  '{n}' already in dispatch queue, skipping duplicate")
+        log.info(f"  Added '{n}' to dispatch queue (queue size: {dispatch_queue.qsize()})")
 
     t = threading.Timer(CONFIRM_DELAY, _confirmed)
     t.daemon = True
@@ -497,14 +521,40 @@ class _LocalTriggerHandler(BaseHTTPRequestHandler):
         self._handle()
     def do_POST(self):
         self._handle()
+    def _authorized(self) -> bool:
+        if not TRIGGER_TOKEN:
+            return False
+        presented = self.headers.get("X-AROHAN-Trigger-Token", "")
+        if not presented:
+            scheme, _, token = self.headers.get("Authorization", "").partition(" ")
+            if scheme.lower() == "bearer":
+                presented = token
+        return bool(presented) and hmac.compare_digest(
+            presented.encode("utf-8"), TRIGGER_TOKEN.encode("utf-8")
+        )
+
     def _handle(self):
         parsed = urlparse(self.path)
         if parsed.path == "/trigger":
+            if not self._authorized():
+                self.send_error(401, "valid trigger token required")
+                return
             params = parse_qs(parsed.query)
             node = params.get("node", ["iot"])[0]
-            log.info(f"🔔 [LOCAL TRIGGER] Node '{node}' triggered via HTTP")
-            dispatch_queue.put(node)
-            self.send_response(200)
+            if not NODE_NAME_RE.fullmatch(node) or node not in ALLOWED_NODES:
+                self.send_error(400, "node is not allowed")
+                return
+            with queue_lock:
+                if node in queued_nodes or rover_busy:
+                    self.send_response(202)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"already queued or rover busy")
+                    return
+                queued_nodes.add(node)
+                dispatch_queue.put(node)
+            log.info(f"🔔 [LOCAL TRIGGER] Node '{node}' triggered via authenticated HTTP")
+            self.send_response(202)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write(f"OK — '{node}' queued for dispatch".encode())
