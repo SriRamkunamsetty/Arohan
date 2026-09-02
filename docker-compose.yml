@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arohan-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - BACKEND_URL=http://localhost:5000
+      - ESP32_CAM_URL=${ESP32_CAM_URL:-http://192.168.1.22:81}
+      - CONFIDENCE_THRESHOLD=0.38
+      - FR_DISTANCE_THRESHOLD=0.55
+    volumes:
+      - ./backend/static/snapshots:/app/static/snapshots
+      - ./backend/known_faces:/app/known_faces
+      - ./backend/trained_model:/app/trained_model
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: arohan-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_CV_BACKEND_URL=http://localhost:5000
+    depends_on:
+      - backend
