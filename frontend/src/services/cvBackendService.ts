@@ -16,11 +16,16 @@ export interface AnalyzeFrameResponse {
 }
 
 export interface BackendHealth {
-  status: string;
-  opencv_ready: boolean;
+  status: 'healthy' | 'degraded' | string;
+  detector: string;
+  recognizer: string;
   known_faces: number;
-  alerts_count: number;
-  esp32_url: string;
+  per_person_encodings: Record<string, number>;
+  total_encodings: number;
+  esp32_connected: boolean;
+  esp32_frames: number;
+  esp32_error: string;
+  threshold: number;
 }
 
 export class CVBackendService {
