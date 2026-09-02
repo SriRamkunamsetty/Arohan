@@ -14,8 +14,21 @@
 #include "soc/rtc_cntl_reg.h"
 
 // ========================== WIFI CONFIG ==========================
-const char* ssid     = "Airtel_Fearless";
-const char* password = "Fearless@1234";
+// Copy credentials.example.h to credentials.h and fill it locally.
+// credentials.h is ignored by Git and must never be committed.
+#if __has_include("credentials.h")
+#include "credentials.h"
+#endif
+
+#ifndef AROHAN_WIFI_SSID
+#define AROHAN_WIFI_SSID ""
+#endif
+#ifndef AROHAN_WIFI_PASSWORD
+#define AROHAN_WIFI_PASSWORD ""
+#endif
+
+const char* ssid     = AROHAN_WIFI_SSID;
+const char* password = AROHAN_WIFI_PASSWORD;
 
 // ========================== CAMERA PINS (AI-Thinker) ==========================
 #define PWDN_GPIO_NUM     32
