@@ -1,35 +1,43 @@
 rules_version = '2';
 
-// Firebase Storage Security Rules for AROHAN
-// These rules secure snapshot uploads and ensure only authenticated users can access them
-
+// Firebase Storage Security Rules for AROHAN.
+// The Admin SDK used by trusted backend services bypasses these client rules.
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // AROHAN Snapshots
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function operator() {
+      return signedIn() && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'operator'
+      );
+    }
+
+    function validImage() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /arohan/snapshots/{fileName} {
-      // Allow authenticated users to read snapshots
-      allow read: if request.auth != null;
-      
-      // Allow authenticated users to upload snapshots with restrictions
-      allow write: if request.auth != null 
-                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
-                   && request.resource.contentType.matches('image/.*')  // Only images
-                   && request.resource.metadata.nodeId != null;  // Must have nodeId metadata
+      allow read: if operator();
+      allow create: if operator()
+        && validImage()
+        && request.resource.metadata.nodeId != null;
+      allow update: if false;
+      allow delete: if request.auth.token.role == 'admin';
     }
-    
-    // AROHAN Alerts (with snapshots)
+
     match /arohan/alerts/{alertId}/{fileName} {
-      // Allow authenticated users to read alert snapshots
-      allow read: if request.auth != null;
-      
-      // Allow authenticated users to upload alert snapshots
-      allow write: if request.auth != null 
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+      allow read: if operator();
+      allow create: if operator()
+        && validImage()
+        && request.resource.metadata.alertId == alertId;
+      allow update: if false;
+      allow delete: if request.auth.token.role == 'admin';
     }
-    
-    // Deny all other access
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
