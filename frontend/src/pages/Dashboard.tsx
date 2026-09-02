@@ -100,7 +100,7 @@ const Dashboard = () => {
         return updated.slice(-10);
       });
     }
-  }, [iotReadings?.mq2, iotReadings?.mq135_digital, iotReadings?.temperature, iotReadings?.humidity]);
+  }, [iotReadings]);
 
   // Calculate sensor risks from real data
   const sensorRisks = useMemo(() => {

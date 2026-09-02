@@ -224,7 +224,7 @@ const RoverConsole = () => {
     if (currentDirection !== 'stop' && mode === 'manual') {
       setRoverDirection(currentDirection, speed[0]);
     }
-  }, [speed]);
+  }, [currentDirection, mode, setRoverDirection, speed]);
 
   // Show loading state
   if (roverLoading && !roverControl && !roverStatus) {
