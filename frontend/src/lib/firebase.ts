@@ -19,6 +19,6 @@ export const database: Database = getDatabase(app);
 
 // Initialize Analytics (only in browser)
 export let analytics: Analytics | undefined;
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.MODE !== 'test') {
   analytics = getAnalytics(app);
 }
