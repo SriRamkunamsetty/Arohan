@@ -9,7 +9,7 @@ Usage:
     python whatsapp_monitor.py
 """
 
-import os, time, json
+import os, time, json, hashlib
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -91,6 +91,7 @@ class WhatsAppSender:
     def __init__(self):
         self._client = None
         self._cooldowns: Dict[str, float] = {}
+        self._sent_events: set[str] = set()
         self._cooldown_sec = 60  # 1 min between same alert type
 
         if TWILIO_OK:
@@ -102,6 +103,11 @@ class WhatsAppSender:
 
     def send(self, alert_type: str, severity: str, summary: str,
              details: Optional[dict] = None) -> bool:
+        event_material = f"{alert_type}|{severity}|{summary}|{details or {}}"
+        event_id = hashlib.sha256(event_material.encode('utf-8')).hexdigest()
+        if event_id in self._sent_events:
+            print(f"⏳ Duplicate event '{alert_type}' — skipped")
+            return False
         if not self._client:
             print("⚠  Twilio not initialized — skipping")
             return False
@@ -142,6 +148,7 @@ class WhatsAppSender:
                 body=msg, from_=TWILIO_WA_FROM, to=TWILIO_WA_TO
             )
             self._cooldowns[alert_type] = now
+            self._sent_events.add(event_id)
             print(f"✅ WhatsApp sent: {alert_type} → SID {result.sid}")
 
             # Log to Firebase
@@ -228,6 +235,11 @@ class IoTMonitor:
 #  MAIN
 # ══════════════════════════════════════════════════════════════
 def main():
+    if os.getenv('AROHAN_ALERT_OWNER', 'cv_backend').lower() != 'standalone':
+        print("Standalone WhatsApp monitor is disabled; CV backend owns alert delivery by default.")
+        print("Set AROHAN_ALERT_OWNER=standalone only when running this process as the sole alert owner.")
+        return
+
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("  AROHAN — WhatsApp Alert Monitor")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
