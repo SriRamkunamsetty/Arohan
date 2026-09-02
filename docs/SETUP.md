@@ -360,3 +360,33 @@ WantedBy=multi-user.target
 ---
 
 **Next**: [Component Reference](./COMPONENTS.md)
+
+
+---
+
+## 🐳 Docker Quickstart (1-Click Setup)
+
+For seamless local development without configuring local Python, OpenCV, or Node compilers:
+
+### 1. Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20+)
+- Docker Compose v2+
+
+### 2. Launch Services
+```bash
+# Clone and enter the repository
+git clone https://github.com/shaddy-pv/Arohan.git
+cd Arohan
+
+# Build and start all services in the background
+docker compose up --build -d
+```
+
+### 3. Verify Deployment
+- **Dashboard UI**: [http://localhost:8080](http://localhost:8080)
+- **CV Backend Health API**: [http://localhost:5000/health](http://localhost:5000/health)
+
+### 4. Stopping Containers
+```bash
+docker compose down
+```
