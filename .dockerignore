@@ -1,0 +1,13 @@
+**/.git
+**/.vscode
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/build
+**/dist
+**/.env
+**/.env.local
+**/trained_model/*.pkl
+**/static/snapshots/*.jpg

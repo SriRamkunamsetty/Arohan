@@ -53,29 +53,54 @@ export function computeHazardScore(
   return Math.max(0, Math.min(100, hazardScore));
 }
 
+export type CanonicalSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type LegacyRiskLevel = 'SAFE' | 'WARNING' | 'DANGER';
+export type RiskLevel = CanonicalSeverity | LegacyRiskLevel;
+
+/**
+ * Get canonical 4-tier hazard severity classification
+ * 0-25: LOW
+ * 25-50: MEDIUM
+ * 50-75: HIGH
+ * 75-100: CRITICAL
+ */
+export function getCanonicalSeverity(hazardScore: number): CanonicalSeverity {
+  if (hazardScore < 25) return 'LOW';
+  if (hazardScore < 50) return 'MEDIUM';
+  if (hazardScore < 75) return 'HIGH';
+  return 'CRITICAL';
+}
+
 /**
  * Get risk level classification based on hazard score
  * 0-30: SAFE
  * 30-60: WARNING
  * 60-100: DANGER
  */
-export function getRiskLevel(hazardScore: number): 'SAFE' | 'WARNING' | 'DANGER' {
+export function getRiskLevel(hazardScore: number): LegacyRiskLevel {
   if (hazardScore < 30) return 'SAFE';
   if (hazardScore < 60) return 'WARNING';
   return 'DANGER';
 }
 
 /**
- * Get risk color for UI display
+ * Get risk color for UI display across 4-tier canonical and legacy levels
  */
-export function getRiskColor(riskLevel: 'SAFE' | 'WARNING' | 'DANGER'): string {
+export function getRiskColor(riskLevel: RiskLevel): string {
   switch (riskLevel) {
+    case 'LOW':
     case 'SAFE':
       return 'text-green-500';
+    case 'MEDIUM':
     case 'WARNING':
       return 'text-yellow-500';
+    case 'HIGH':
+      return 'text-orange-500';
+    case 'CRITICAL':
     case 'DANGER':
       return 'text-red-500';
+    default:
+      return 'text-muted-foreground';
   }
 }
 
