@@ -65,6 +65,10 @@ datasets/
 *.arrow
 *.feather
 
+# ------ Local Hardware Credentials ------
+hardware/**/credentials.h
+hardware/**/secrets.h
+
 # ------ Sensitive / Personal Data ------
 ronin-80b29-default-rtdb-export.json
 *.db-export.json
