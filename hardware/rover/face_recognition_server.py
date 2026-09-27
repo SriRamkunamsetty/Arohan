@@ -42,7 +42,7 @@ ENCODINGS_FILE = os.path.join(MODEL_DIR, "encodings.pkl")
 
 # ── CONFIG ─────────────────────────────────────────────────────────
 RECOGNITION_THRESHOLD = 0.85  # Cosine similarity — higher = stricter match
-SERVER_PORT = 5000
+SERVER_PORT = int(os.getenv("ROVER_SERVER_PORT", "5005"))
 
 # ── FLASK APP ──────────────────────────────────────────────────────
 app = Flask(__name__)

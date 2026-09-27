@@ -19,7 +19,17 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-FIREBASE_DB_URL = "https://ronin-80b29-default-rtdb.firebaseio.com"
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+FIREBASE_DB_URL = os.getenv(
+    "FIREBASE_DATABASE_URL",
+    os.getenv("FIREBASE_DB_URL", "https://ronin-80b29-default-rtdb.firebaseio.com")
+)
+DB_PREFIX = os.getenv("AROHAN_DB_PREFIX", "ronin").strip("/")
 # Defaulting to mDNS resolution on home network (fallback to "192.168.4.1"
 # if disconnected)
 ROVER_AP_IP = "arohan.local"
@@ -84,7 +94,7 @@ def load_available_paths():
     """Fetch all saved path names from Firebase."""
     global known_paths
     try:
-        ref = db.reference("ronin/rover/paths")
+        ref = db.reference(f"{DB_PREFIX}/rover/paths")
         paths_data = ref.get()
         if paths_data and isinstance(paths_data, dict):
             known_paths = set(paths_data.keys())
@@ -100,7 +110,7 @@ def reset_calling_status(node_name: str):
     """Reset a node's calling_status to false in Firebase."""
     try:
         ref = db.reference(
-            f"ronin/iot_nodes/{node_name}/status/calling_status")
+            f"{DB_PREFIX}/iot_nodes/{node_name}/status/calling_status")
         ref.set(False)
         log.info(f"Reset calling_status for {node_name}")
     except Exception as e:
@@ -110,7 +120,7 @@ def reset_calling_status(node_name: str):
 def update_rover_status_fb(status: str):
     """Update rover status in Firebase."""
     try:
-        ref = db.reference("ronin/rover/status")
+        ref = db.reference(f"{DB_PREFIX}/rover/status")
         ref.set(status)
     except Exception:
         pass  # Non-critical
@@ -164,7 +174,7 @@ def send_playpath(path_name: str) -> bool:
     """Fetch path from Firebase and POST it directly to rover."""
     # 1. Fetch path from Firebase
     try:
-        ref = db.reference(f"ronin/rover/paths/{path_name}")
+        ref = db.reference(f"{DB_PREFIX}/rover/paths/{path_name}")
         path_data = ref.get()
         if not path_data:
             log.error(f"❌ Path '{path_name}' not found in Firebase database")
@@ -504,9 +514,9 @@ def setup_node_listeners():
                     cancel_confirm_countdown(node_name)
 
     # Listen to entire iot_nodes tree
-    ref = db.reference("ronin/iot_nodes")
+    ref = db.reference(f"{DB_PREFIX}/iot_nodes")
     ref.listen(on_nodes_change)
-    log.info("Listening on ronin/iot_nodes/")
+    log.info(f"Listening on {DB_PREFIX}/iot_nodes/")
 
 
 def attach_node_listener(node_name: str):
@@ -536,6 +546,15 @@ class _LocalTriggerHandler(BaseHTTPRequestHandler):
         if parsed.path == "/trigger":
             params = parse_qs(parsed.query)
             node = params.get("node", ["iot"])[0]
+            # Strict node parameter validation (alphanumeric, underscore, dash, max 64 chars)
+            import re
+            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", node):
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ERROR: Invalid node identifier")
+                return
+
             log.info(f"🔔 [LOCAL TRIGGER] Node '{node}' triggered via HTTP")
             dispatch_queue.put(node)
             self.send_response(200)
@@ -745,7 +764,7 @@ def poll_local_path_thread():
 
             # --- Authoritative check: does this path actually exist in Firebase? ---
             try:
-                existing = db.reference(f"ronin/rover/paths/{path_name}").get()
+                existing = db.reference(f"{DB_PREFIX}/rover/paths/{path_name}").get()
                 already_in_firebase = existing is not None
             except Exception:
                 # If we can't reach Firebase assume it's not there (safe to
@@ -764,7 +783,7 @@ def poll_local_path_thread():
             log.info(f"💾 Rover has local path '{path_name}' ({step_count} steps) "
                      f"that is NOT in Firebase — uploading...")
             try:
-                ref = db.reference(f"ronin/rover/paths/{path_name}")
+                ref = db.reference(f"{DB_PREFIX}/rover/paths/{path_name}")
                 ref.set(data)
                 log.info(
                     f"☁️  Successfully uploaded path '{path_name}' to Firebase!")
