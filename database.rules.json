@@ -2,56 +2,58 @@
   "rules": {
     "ronin": {
       ".read": "auth != null",
-      ".write": "auth != null",
 
       "iot": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.deviceId == 'iot')",
         ".indexOn": ["hazardScore", "status/lastHeartbeat"],
-        ".validate": "newData.hasChildren(['mq2','mq135','temperature','humidity','hazardScore'])"
+        ".validate": "newData.hasChildren(['mq2','mq135','temperature','humidity','hazardScore']) && newData.child('mq2').isNumber() && newData.child('mq135').isNumber() && newData.child('temperature').isNumber() && newData.child('humidity').isNumber() && newData.child('hazardScore').isNumber() && newData.child('hazardScore').val() >= 0 && newData.child('hazardScore').val() <= 100"
       },
 
       "rover": {
         ".read": "auth != null",
-        ".write": "auth != null",
 
         "control": {
-          ".indexOn": ["mode", "direction"]
+          ".read": "auth != null",
+          ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+          ".validate": "newData.hasChildren(['mode','direction']) && newData.child('mode').isString() && newData.child('direction').isString()"
         },
         "status": {
+          ".read": "auth != null",
+          ".write": "auth != null && (auth.token.role == 'admin' || auth.token.deviceId == 'rover')",
           ".indexOn": ["online", "battery"]
         },
         "config": {
-          ".read": "auth != null",
-          ".write": "auth != null"
+          ".read": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+          ".write": "auth != null && auth.token.role == 'admin'"
         }
       },
 
       "alerts": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.deviceId == 'alert-service')",
         ".indexOn": ["timestamp", "severity", "resolved"]
       },
 
       "history": {
         ".read": "auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.deviceId == 'iot')",
         ".indexOn": ["timestamp", "riskLevel"]
       },
 
       "settings": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".write": "auth != null && auth.token.role == 'admin'"
       },
 
       "systemInfo": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null && auth.token.role == 'admin'"
       },
 
       "whatsapp_logs": {
-        ".read": "auth != null",
-        ".write": true,
+        ".read": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.deviceId == 'alert-service')",
         ".indexOn": ["timestamp", "alertType", "status"]
       }
     }
