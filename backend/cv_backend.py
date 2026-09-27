@@ -38,6 +38,12 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 
 try:
+    from .api_auth import require_auth
+except ImportError:
+    from api_auth import require_auth
+
+
+try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
@@ -115,6 +121,33 @@ DNN_MODEL_URL = ("https://raw.githubusercontent.com/opencv/opencv_3rdparty/"
 
 for d in [SNAP_DIR, KNOWN_DIR, Path('trained_model')]:
     d.mkdir(parents=True, exist_ok=True)
+
+FACE_NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$')
+MAX_FACE_IMAGE_BYTES = int(os.getenv('MAX_FACE_IMAGE_BYTES', str(5 * 1024 * 1024)))
+MAX_FACE_IMAGE_PIXELS = int(os.getenv('MAX_FACE_IMAGE_PIXELS', str(12_000_000)))
+
+
+def _decode_face_image(value: str) -> Optional[np.ndarray]:
+    import binascii
+    if not isinstance(value, str) or not value:
+        raise ValueError('image required')
+    encoded = value.split(',', 1)[-1]
+    if len(encoded) > MAX_FACE_IMAGE_BYTES * 2:
+        raise ValueError('image payload too large')
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError('invalid base64 image') from exc
+    if len(raw) > MAX_FACE_IMAGE_BYTES:
+        raise ValueError('image payload too large')
+    frame = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        raise ValueError('decode fail')
+    height, width = frame.shape[:2]
+    if height * width > MAX_FACE_IMAGE_PIXELS:
+        raise ValueError('image dimensions too large')
+    return frame
+
 
 COLOR_KNOWN = (0, 230, 0)
 COLOR_UNKNOWN = (0, 0, 230)
@@ -1917,6 +1950,7 @@ class CVBackend:
         # ── DIRECT ROVER CONTROL (no Firebase needed) ────────────
 
         @self.app.route('/rover/control', methods=['POST'])
+        @require_auth({'admin', 'operator', 'service'})
         def rover_control():
             """Send command IMMEDIATELY to rover — no polling delay."""
             try:
@@ -1940,6 +1974,7 @@ class CVBackend:
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/rover/stop', methods=['POST', 'GET'])
+        @require_auth({'admin', 'operator', 'service'})
         def rover_stop():
             self._rover_bridge._send_cmd('/stop')
             self._rover_bridge.set_direct('stop', 0)
